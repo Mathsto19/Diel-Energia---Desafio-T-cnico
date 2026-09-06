@@ -1,25 +1,25 @@
 # Registro de testes
 
-Data do registro: 06/09/2026. Os sensores usados no modo `simulated` são valores gerados pelo firmware; não representam sensores físicos.
+Data do registro: 06/09/2026. Os sensores usados no modo `simulated` sï¿½o valores gerados pelo firmware; nï¿½o representam sensores fï¿½sicos.
 
 | Teste | Resultado observado |
 | --- | --- |
-| Inicialização | **Validado por compilação.** Não houve erro de alocação ou reinicialização durante a validação estática; execução em placa/Wokwi não foi realizada nesta sessão. |
-| Telemetria | **Validado no código e na compilação.** O JSON inclui sensores, GPIO e diagnóstico; chegada pelo broker ainda precisa ser observada no MQTTX. |
-| Pressionar e soltar | **Validado no código.** O componente Button registra eventos separados; latência local e chegada pelo broker não foram medidas nesta sessão. |
-| Leitura Modbus demorada | **Não executado em hardware/Wokwi.** A consulta usa timeout e ocorre na tarefa de telemetria; a fila e a tarefa GPIO permanecem independentes. |
-| Servidor Modbus desligado | **Validado por tratamento no código.** A leitura retorna inválida e a aplicação continua; falta evidência de monitor em execução. |
-| Servidor restaurado | **Não executado.** O mestre repete a consulta no próximo período e deve recuperar os registradores. |
-| Conexão do ESP32 interrompida | **Validado por configuração.** Outbox QoS 1 limitado a 16 KiB; não foi feita interrupção de rede durante uma execução. |
-| Conexão restaurada | **Não executado.** O ESP-MQTT mantém retransmissão de pendências QoS 1. |
-| Outbox cheio | **Validado no código.** Retornos de enfileiramento e descarte são contabilizados; não foi forçada uma fila cheia em execução. |
-| Intervalo alterado | **Validado por compilação e código.** A fila de configuração aplica valores válidos e publica ACK; teste MQTTX de 5.000 para 2.000 ms pendente. |
-| JSON de comando inválido | **Validado no código.** JSON inválido, tamanho excedente e intervalo fora da faixa são rejeitados sem reinicialização. |
-| Certificado inválido | **Não executado nesta sessão.** A configuração usa bundle de CAs e validação do nome para rejeitar certificado/servidor incompatível. |
-| Execução contínua | **Não executado.** Duração registrada: 0 minutos; é necessário repetir por pelo menos 30 minutos e anotar memória e reinicializações. |
+| Inicializaï¿½ï¿½o | **Validado por compilaï¿½ï¿½o.** Nï¿½o houve erro de alocaï¿½ï¿½o ou reinicializaï¿½ï¿½o durante a validaï¿½ï¿½o estï¿½tica; execuï¿½ï¿½o em placa/Wokwi nï¿½o foi realizada nesta sessï¿½o. |
+| Telemetria | **Validado no cï¿½digo e na compilaï¿½ï¿½o.** O JSON inclui sensores, GPIO e diagnï¿½stico; chegada pelo broker ainda precisa ser observada no MQTTX. |
+| Pressionar e soltar | **Validado em execuÃ§Ã£o no Wokwi.** O GPIO 27 foi detectado em nÃ­vel baixo ao pressionar e alto ao soltar, com debounce e geraÃ§Ã£o dos eventos `pressionado` e `solto` no monitor serial. |
+| Leitura Modbus demorada | **Nï¿½o executado em hardware/Wokwi.** A consulta usa timeout e ocorre na tarefa de telemetria; a fila e a tarefa GPIO permanecem independentes. |
+| Servidor Modbus desligado | **Validado por tratamento no cï¿½digo.** A leitura retorna invï¿½lida e a aplicaï¿½ï¿½o continua; falta evidï¿½ncia de monitor em execuï¿½ï¿½o. |
+| Servidor restaurado | **Nï¿½o executado.** O mestre repete a consulta no prï¿½ximo perï¿½odo e deve recuperar os registradores. |
+| Conexï¿½o do ESP32 interrompida | **Validado por configuraï¿½ï¿½o.** Outbox QoS 1 limitado a 16 KiB; nï¿½o foi feita interrupï¿½ï¿½o de rede durante uma execuï¿½ï¿½o. |
+| Conexï¿½o restaurada | **Nï¿½o executado.** O ESP-MQTT mantï¿½m retransmissï¿½o de pendï¿½ncias QoS 1. |
+| Outbox cheio | **Validado no cï¿½digo.** Retornos de enfileiramento e descarte sï¿½o contabilizados; nï¿½o foi forï¿½ada uma fila cheia em execuï¿½ï¿½o. |
+| Intervalo alterado | **Validado por compilaï¿½ï¿½o e cï¿½digo.** A fila de configuraï¿½ï¿½o aplica valores vï¿½lidos e publica ACK; teste MQTTX de 5.000 para 2.000 ms pendente. |
+| JSON de comando invï¿½lido | **Validado no cï¿½digo.** JSON invï¿½lido, tamanho excedente e intervalo fora da faixa sï¿½o rejeitados sem reinicializaï¿½ï¿½o. |
+| Certificado invï¿½lido | **Nï¿½o executado nesta sessï¿½o.** A configuraï¿½ï¿½o usa bundle de CAs e validaï¿½ï¿½o do nome para rejeitar certificado/servidor incompatï¿½vel. |
+| Execuï¿½ï¿½o contï¿½nua | **Nï¿½o executado.** Duraï¿½ï¿½o registrada: 0 minutos; ï¿½ necessï¿½rio repetir por pelo menos 30 minutos e anotar memï¿½ria e reinicializaï¿½ï¿½es. |
 
-## Evidências
+## Evidï¿½ncias
 
-Não foram salvas capturas do monitor serial ou do MQTTX nesta sessão. Para completar a entrega experimental, salvar capturas com `MQTT_EVENT_CONNECTED`, uma telemetria, um evento GPIO, um ACK de configuração e uma leitura Modbus inválida/restaurada.
+Nï¿½o foram salvas capturas do monitor serial ou do MQTTX nesta sessï¿½o. Para completar a entrega experimental, salvar capturas com `MQTT_EVENT_CONNECTED`, uma telemetria, um evento GPIO, um ACK de configuraï¿½ï¿½o e uma leitura Modbus invï¿½lida/restaurada.
 
-A latência local deve ser registrada comparando o instante em milissegundos impresso no evento GPIO com o instante de chegada no MQTTX; esses valores devem ser anotados separadamente.
+A latï¿½ncia local deve ser registrada comparando o instante em milissegundos impresso no evento GPIO com o instante de chegada no MQTTX; esses valores devem ser anotados separadamente.

@@ -9,5 +9,4 @@ dependencies:
   idf:
     version: '>=5.3'
   espressif/cjson: '*'
-  espressif/button: ^4.2.1
   espressif/esp-modbus: ^2.1.3

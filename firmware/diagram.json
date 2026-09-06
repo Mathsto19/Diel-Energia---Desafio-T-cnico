@@ -17,15 +17,22 @@
       "left": 240,
       "attrs": {
         "color": "blue",
-        "xray": "1"
+        "bounce": "0",
+        "key": "B"
       }
     }
   ],
   "connections": [
-    [ "esp:TX0", "$serialMonitor:RX", "", [] ],
-    [ "esp:RX0", "$serialMonitor:TX", "", [] ],
-    [ "button1:1.l", "esp:27", "green", [] ],
-    [ "button1:2.l", "esp:GND.1", "black", [] ]
+  [ "esp:TX0", "$serialMonitor:RX", "", [] ],
+  [ "esp:RX0", "$serialMonitor:TX", "", [] ],
+
+  [ "button1:1.l", "esp:D27", "green",
+    [ "h-25", "v-120", "*", "v-120", "h25" ]
   ],
+
+  [ "button1:2.r", "esp:GND.1", "black",
+    [ "h25", "v140", "*", "v140", "h-25" ]
+  ]
+],
   "dependencies": {}
 }

@@ -1,97 +1,186 @@
 #include "gpio_input.h"
 
 #include "app_config.h"
-#include "button_gpio.h"
-#include "esp_check.h"
+
+#include "driver/gpio.h"
+#include "esp_log.h"
 #include "esp_timer.h"
+
 #include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
-#include "freertos/semphr.h"
 #include "freertos/task.h"
-#include "iot_button.h"
 
-#define TAMANHO_FILA_EVENTOS_BOTAO 8
+#define TEMPO_DEBOUNCE_MS 30
+#define PERIODO_LEITURA_MS 10
 
-typedef struct {
-    bool pressionado;
-    uint32_t instante_ms;
-} evento_botao_fila_t;
+static const char *TAG = "entrada_gpio";
 
-static QueueHandle_t fila_eventos;
-static SemaphoreHandle_t mutex_estado;
-static button_handle_t dispositivo_botao;
 static evento_botao_t callback_evento;
-static bool nivel_atual;
+static volatile bool botao_pressionado;
 static volatile uint32_t eventos_perdidos;
 
-static void callback_botao(void *dispositivo, void *dados)
+static void tarefa_botao(void *argumento)
 {
-    evento_botao_fila_t evento = {
-        .pressionado = iot_button_get_event(dispositivo) == BUTTON_PRESS_DOWN,
-        .instante_ms = (uint32_t)(esp_timer_get_time() / 1000ULL),
-    };
-    (void) dados;
-    if (xQueueSend(fila_eventos, &evento, 0) != pdTRUE) {
-        __atomic_fetch_add(&eventos_perdidos, 1, __ATOMIC_RELAXED);
-    }
-}
+    (void)argumento;
 
-static void tarefa_eventos_gpio(void *argumento)
-{
-    evento_botao_fila_t evento;
-    (void) argumento;
+    int ultimo_nivel_lido = gpio_get_level(GPIO_BOTAO);
+    int nivel_estavel = ultimo_nivel_lido;
 
-    while (xQueueReceive(fila_eventos, &evento, portMAX_DELAY) == pdTRUE) {
-        xSemaphoreTake(mutex_estado, portMAX_DELAY);
-        nivel_atual = evento.pressionado;
-        xSemaphoreGive(mutex_estado);
-        if (callback_evento != NULL) {
-            callback_evento(evento.pressionado, evento.instante_ms);
+    TickType_t instante_ultima_mudanca = xTaskGetTickCount();
+
+    ESP_LOGI(
+        TAG,
+        "Monitorando GPIO %d | nivel inicial=%d",
+        GPIO_BOTAO,
+        ultimo_nivel_lido
+    );
+
+    while (true) {
+
+        int nivel_lido = gpio_get_level(GPIO_BOTAO);
+
+        /*
+         * Detectou mudança elétrica no pino.
+         */
+        if (nivel_lido != ultimo_nivel_lido) {
+
+            ESP_LOGI(
+                TAG,
+                "GPIO %d mudou fisicamente: %d -> %d",
+                GPIO_BOTAO,
+                ultimo_nivel_lido,
+                nivel_lido
+            );
+
+            ultimo_nivel_lido = nivel_lido;
+            instante_ultima_mudanca = xTaskGetTickCount();
         }
+
+        /*
+         * Só considera a mudança válida depois do debounce.
+         */
+        if (nivel_lido != nivel_estavel) {
+
+            TickType_t tempo_decorrido =
+                xTaskGetTickCount() - instante_ultima_mudanca;
+
+            if (tempo_decorrido >= pdMS_TO_TICKS(TEMPO_DEBOUNCE_MS)) {
+
+                nivel_estavel = nivel_lido;
+
+                bool pressionado = (nivel_estavel == 0);
+
+                __atomic_store_n(
+                    &botao_pressionado,
+                    pressionado,
+                    __ATOMIC_RELAXED
+                );
+
+                uint32_t instante_ms =
+                    (uint32_t)(esp_timer_get_time() / 1000ULL);
+
+                ESP_LOGI(
+                    TAG,
+                    "BOTAO %s | GPIO=%d | nivel=%d | tempo=%lu ms",
+                    pressionado ? "PRESSIONADO" : "SOLTO",
+                    GPIO_BOTAO,
+                    nivel_estavel,
+                    (unsigned long)instante_ms
+                );
+
+                if (callback_evento != NULL) {
+                    callback_evento(
+                        pressionado,
+                        instante_ms
+                    );
+                }
+            }
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(PERIODO_LEITURA_MS));
     }
 }
 
 esp_err_t entrada_gpio_iniciar(evento_botao_t callback)
 {
-    const button_config_t configuracao_botao = {0};
-    const button_gpio_config_t configuracao_gpio = {
-        .gpio_num = GPIO_BOTAO,
-        .active_level = 0,
+    callback_evento = callback;
+
+    gpio_config_t configuracao = {
+        .pin_bit_mask = (1ULL << GPIO_BOTAO),
+        .mode = GPIO_MODE_INPUT,
+
+        /*
+         * Botão ligado entre GPIO 27 e GND.
+         * Solto = 1
+         * Pressionado = 0
+         */
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+
+        /*
+         * Por enquanto não usamos interrupção.
+         * A task faz leitura direta para simplificar
+         * e tornar o diagnóstico determinístico.
+         */
+        .intr_type = GPIO_INTR_DISABLE
     };
 
-    fila_eventos = xQueueCreate(TAMANHO_FILA_EVENTOS_BOTAO, sizeof(evento_botao_fila_t));
-    mutex_estado = xSemaphoreCreateMutex();
-    if (fila_eventos == NULL || mutex_estado == NULL) {
+    esp_err_t erro = gpio_config(&configuracao);
+
+    if (erro != ESP_OK) {
+        ESP_LOGE(
+            TAG,
+            "Falha ao configurar GPIO %d: %s",
+            GPIO_BOTAO,
+            esp_err_to_name(erro)
+        );
+
+        return erro;
+    }
+
+    int nivel_inicial = gpio_get_level(GPIO_BOTAO);
+
+    __atomic_store_n(
+        &botao_pressionado,
+        nivel_inicial == 0,
+        __ATOMIC_RELAXED
+    );
+
+    ESP_LOGI(
+        TAG,
+        "GPIO %d configurado como entrada com pull-up | nivel=%d",
+        GPIO_BOTAO,
+        nivel_inicial
+    );
+
+    BaseType_t resultado = xTaskCreate(
+        tarefa_botao,
+        "tarefa_botao",
+        3072,
+        NULL,
+        5,
+        NULL
+    );
+
+    if (resultado != pdPASS) {
+        ESP_LOGE(TAG, "Falha ao criar tarefa do botao");
         return ESP_ERR_NO_MEM;
     }
 
-    callback_evento = callback;
-    ESP_RETURN_ON_ERROR(iot_button_new_gpio_device(&configuracao_botao, &configuracao_gpio, &dispositivo_botao),
-                        "entrada_gpio", "Falha ao criar botao GPIO");
-    ESP_RETURN_ON_ERROR(iot_button_register_cb(dispositivo_botao, BUTTON_PRESS_DOWN, NULL, callback_botao, NULL),
-                        "entrada_gpio", "Falha ao registrar evento de pressionar");
-    ESP_RETURN_ON_ERROR(iot_button_register_cb(dispositivo_botao, BUTTON_PRESS_UP, NULL, callback_botao, NULL),
-                        "entrada_gpio", "Falha ao registrar evento de soltar");
-
-    xSemaphoreTake(mutex_estado, portMAX_DELAY);
-    nivel_atual = iot_button_get_key_level(dispositivo_botao) == 0;
-    xSemaphoreGive(mutex_estado);
-
-    return xTaskCreate(tarefa_eventos_gpio, "eventos_gpio", 3072, NULL, 5, NULL) == pdPASS
-               ? ESP_OK
-               : ESP_ERR_NO_MEM;
+    return ESP_OK;
 }
 
 bool entrada_gpio_nivel_atual(void)
 {
-    bool nivel;
-    xSemaphoreTake(mutex_estado, portMAX_DELAY);
-    nivel = nivel_atual;
-    xSemaphoreGive(mutex_estado);
-    return nivel;
+    return __atomic_load_n(
+        &botao_pressionado,
+        __ATOMIC_RELAXED
+    );
 }
 
 uint32_t entrada_gpio_eventos_perdidos(void)
 {
-    return __atomic_load_n(&eventos_perdidos, __ATOMIC_RELAXED);
+    return __atomic_load_n(
+        &eventos_perdidos,
+        __ATOMIC_RELAXED
+    );
 }
