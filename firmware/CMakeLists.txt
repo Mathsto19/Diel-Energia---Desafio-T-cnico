@@ -1,15 +1,14 @@
-﻿# The following lines of boilerplate have to be in your project's CMakeLists
-# in this exact order for cmake to work correctly
+# Mantenha as instruções abaixo nesta ordem para o CMake funcionar corretamente.
 cmake_minimum_required(VERSION 3.22)
 
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-# "Trim" the build. Include the minimal set of components, main, and anything it depends on.
+# Compila apenas o componente main e as dependências necessárias.
 idf_build_set_property(MINIMAL_BUILD ON)
 project(esp32_mqtt_telemetry)
 
-# TODO IDF-15784: remove
-# mqtt upstream sets locals without reading them; silence -Wunused-but-set-variable
+# TODO IDF-15784: remover quando o problema da biblioteca MQTT for corrigido.
+# A biblioteca MQTT atribui variáveis locais sem lê-las; suprime esse aviso do compilador.
 idf_component_get_property(mqtt_lib espressif__mqtt COMPONENT_LIB)
 target_compile_options(${mqtt_lib} PRIVATE -Wno-unused-but-set-variable)
 

@@ -17,7 +17,7 @@ event_client_received_correct = Event()
 message_log = ''
 
 
-# The callback for when the client receives a CONNACK response from the server.
+# Trata a resposta CONNACK recebida do servidor pelo cliente.
 def on_connect(client, userdata, flags, rc):  # type: (mqtt.Client, str, bool, str) -> None
     _ = (userdata, flags)
     print('Connected with result code ' + str(rc))
@@ -30,7 +30,7 @@ def mqtt_client_task(client):  # type: (mqtt.Client) -> None
         client.loop()
 
 
-# The callback for when a PUBLISH message is received from the server.
+# Trata a mensagem PUBLISH recebida do servidor.
 def on_message(client, userdata, msg):  # type: (mqtt.Client, tuple, mqtt.client.MQTTMessage) -> None
     global message_log
     global event_client_received_correct
@@ -48,13 +48,13 @@ def test_examples_protocol_mqtt_ssl(dut):  # type: ignore
     broker_url = ''
     broker_port = 0
     """
-    steps:
-      1. join AP and connects to ssl broker
-      2. Test connects a client to the same broker
-      3. Test evaluates python client received correct qos0 message
-      4. Test ESP32 client received correct qos0 message
+    Etapas:
+      1. Conectar o ESP32 à rede e ao servidor MQTT com TLS.
+      2. Conectar um cliente Python ao mesmo servidor.
+      3. Verificar a mensagem QoS 0 recebida pelo cliente Python.
+      4. Verificar a mensagem QoS 0 recebida pelo ESP32.
     """
-    # Look for host:port in sdkconfig
+    # Obtém o endereço e a porta do servidor no sdkconfig.
     try:
         value = re.search(r'\:\/\/([^:]+)\:([0-9]+)', dut.app.sdkconfig.get('EXAMPLE_MQTT_BROKER_URI'))
         assert value is not None
@@ -63,7 +63,7 @@ def test_examples_protocol_mqtt_ssl(dut):  # type: ignore
     except Exception:
         print('ENV_TEST_FAILURE: Cannot find broker url in sdkconfig')
         raise
-    # 1. Test connects to a broker
+    # 1. Conecta o cliente de teste ao servidor MQTT.
     try:
         client = mqtt.Client()
         client.on_connect = on_connect
@@ -75,7 +75,7 @@ def test_examples_protocol_mqtt_ssl(dut):  # type: ignore
     except Exception:
         print(f'ENV_TEST_FAILURE: Unexpected error while connecting to broker {broker_url}: {sys.exc_info()[0]}:')
         raise
-    # Starting a py-client in a separate thread
+    # Inicia o cliente Python em uma thread separada.
     thread1 = Thread(target=mqtt_client_task, args=(client,))
     thread1.start()
     try:

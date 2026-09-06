@@ -1,4 +1,4 @@
-# Enable the built-in certificate bundle for TLS server verification
+# Habilita o conjunto de certificados do ESP-IDF para verificar o servidor TLS.
 CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
 CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
 CONFIG_EXAMPLE_CONNECT_WIFI=y
