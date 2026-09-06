@@ -29,16 +29,46 @@
 #include "esp_log.h"
 #include "esp_netif.h"
 #include "esp_system.h"
+#include "esp_random.h"
 #include "nvs_flash.h"
 #include "sdkconfig.h"
 
 #include "protocol_examples_common.h"
 
 #include "esp_crt_bundle.h"
+#include "cJSON.h"
+#include "esp_timer.h"
 #include "mqtt_client.h"
 
 static const char *TAG = "telemetria";
 static esp_mqtt_client_handle_t cliente_mqtt;
+static char identificador_boot[9];
+static uint32_t sequencia_mqtt;
+
+static uint32_t obter_uptime_ms(void)
+{
+    return (uint32_t)(esp_timer_get_time() / 1000ULL);
+}
+
+static esp_err_t colocar_json_na_fila(const char *topico, cJSON *objeto)
+{
+    char *texto = cJSON_PrintUnformatted(objeto);
+    if (texto == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+    int id = esp_mqtt_client_enqueue(cliente_mqtt, topico, texto, 0, 1, 0, true);
+    cJSON_free(texto);
+    return id >= 0 ? ESP_OK : ESP_FAIL;
+}
+
+static bool adicionar_campo_comum(cJSON *objeto, const char *tipo)
+{
+    return cJSON_AddStringToObject(objeto, "type", tipo) != NULL &&
+           cJSON_AddStringToObject(objeto, "device_id", IDENTIFICACAO_DISPOSITIVO) != NULL &&
+           cJSON_AddStringToObject(objeto, "boot_id", identificador_boot) != NULL &&
+           cJSON_AddNumberToObject(objeto, "seq", ++sequencia_mqtt) != NULL &&
+           cJSON_AddNumberToObject(objeto, "uptime_ms", obter_uptime_ms()) != NULL;
+}
 
 #if CONFIG_EXAMPLE_BROKER_CERTIFICATE_OVERRIDDEN
 static const char certificado_alternativo_pem[] =
@@ -72,14 +102,8 @@ static void tratar_evento_mqtt(void *argumentos, esp_event_base_t base, int32_t 
     switch ((esp_mqtt_event_id_t)identificador_evento) {
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-        identificador_mensagem = esp_mqtt_client_subscribe(cliente, "topic/qos0", 0);
-        ESP_LOGI(TAG, "Solicitacao de assinatura enviada, id=%d", identificador_mensagem);
-
-        identificador_mensagem = esp_mqtt_client_subscribe(cliente, "topic/qos1", 1);
-        ESP_LOGI(TAG, "Solicitacao de assinatura enviada, id=%d", identificador_mensagem);
-
-        identificador_mensagem = esp_mqtt_client_unsubscribe(cliente, "topic/qos1");
-        ESP_LOGI(TAG, "Solicitacao de cancelamento de assinatura enviada, id=%d", identificador_mensagem);
+        identificador_mensagem = esp_mqtt_client_subscribe(cliente, TOPICO_CONFIGURACAO_SET, 1);
+        ESP_LOGI(TAG, "Assinatura de configuracao enviada, id=%d", identificador_mensagem);
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
@@ -87,8 +111,6 @@ static void tratar_evento_mqtt(void *argumentos, esp_event_base_t base, int32_t 
 
     case MQTT_EVENT_SUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, identificador_mensagem=%d, codigo de retorno=0x%02x ", evento->msg_id, (uint8_t)*evento->data);
-        identificador_mensagem = esp_mqtt_client_publish(cliente, "topic/qos0", "data", 0, 0, 0);
-        ESP_LOGI(TAG, "Solicitacao de publicacao enviada, id=%d", identificador_mensagem);
         break;
     case MQTT_EVENT_UNSUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED, identificador_mensagem=%d", evento->msg_id);
@@ -122,28 +144,45 @@ static void tratar_evento_mqtt(void *argumentos, esp_event_base_t base, int32_t 
 
 static void tratar_evento_botao(bool pressionado, uint32_t instante_ms)
 {
-    ESP_LOGI(TAG, "Botao %s no GPIO %d em %" PRIu32 " ms", pressionado ? "pressionado" : "solto", GPIO_BOTAO, instante_ms);
+    cJSON *evento = cJSON_CreateObject();
+    if (evento == NULL || !adicionar_campo_comum(evento, "gpio_event") ||
+        cJSON_AddNumberToObject(evento, "pin", GPIO_BOTAO) == NULL ||
+        cJSON_AddNumberToObject(evento, "level", pressionado ? 0 : 1) == NULL) {
+        cJSON_Delete(evento);
+        ESP_LOGE(TAG, "Nao foi possivel criar o evento do GPIO");
+        return;
+    }
+    if (colocar_json_na_fila(TOPICO_EVENTO, evento) != ESP_OK) {
+        ESP_LOGW(TAG, "Fila MQTT cheia ao registrar evento do GPIO");
+    }
+    cJSON_Delete(evento);
+    ESP_LOGI(TAG, "Evento GPIO: %s no pino %d em %" PRIu32 " ms", pressionado ? "pressionado" : "solto", GPIO_BOTAO, instante_ms);
 }
 
 static void tarefa_telemetria(void *argumento)
 {
     leitura_sensores_t leitura;
-    char mensagem[160];
     (void) argumento;
 
     while (true) {
         if (sensores_ler(&leitura) == ESP_OK && cliente_mqtt != NULL) {
-            int tamanho = snprintf(mensagem, sizeof(mensagem),
-                                   "{\"dispositivo\":\"%s\",\"modo\":\"simulated\",\"temperatura\":%.2f,\"umidade\":%.2f,\"leitura_valida\":%s}",
-                                   IDENTIFICACAO_DISPOSITIVO,
-                                   leitura.temperatura_celsius,
-                                   leitura.umidade_percentual,
-                                   leitura.leitura_valida ? "true" : "false");
-            esp_mqtt_client_publish(cliente_mqtt, TOPICO_TELEMETRIA, mensagem, tamanho, 1, 0);
-            ESP_LOGI(TAG, "Temperatura: %.1f C | Umidade: %.1f %% | Valida: %s | Modo: simulated",
-                     leitura.temperatura_celsius, leitura.umidade_percentual,
-                     leitura.leitura_valida ? "sim" : "nao");
-            ESP_LOGI(TAG, "Telemetria enviada: %s", mensagem);
+            cJSON *telemetria = cJSON_CreateObject();
+            bool campos_validos = telemetria != NULL && adicionar_campo_comum(telemetria, "telemetry") &&
+                                  cJSON_AddStringToObject(telemetria, "sensor_mode", "simulated") != NULL &&
+                                  cJSON_AddNumberToObject(telemetria, "temperature_c", leitura.temperatura_celsius) != NULL &&
+                                  cJSON_AddNumberToObject(telemetria, "humidity_pct", leitura.umidade_percentual) != NULL &&
+                                  cJSON_AddBoolToObject(telemetria, "sensors_valid", leitura.leitura_valida) != NULL &&
+                                  cJSON_AddNumberToObject(telemetria, "gpio_level", entrada_gpio_nivel_atual() ? 0 : 1) != NULL;
+            if (campos_validos) {
+                if (colocar_json_na_fila(TOPICO_TELEMETRIA, telemetria) != ESP_OK) {
+                    ESP_LOGW(TAG, "Fila MQTT cheia para a telemetria");
+                } else {
+                    ESP_LOGI(TAG, "Telemetria simulada: %.1f C | %.1f %%", leitura.temperatura_celsius, leitura.umidade_percentual);
+                }
+            } else {
+                ESP_LOGE(TAG, "Nao foi possivel criar a telemetria JSON");
+            }
+            cJSON_Delete(telemetria);
         }
         vTaskDelay(pdMS_TO_TICKS(INTERVALO_LEITURA_MS));
     }
@@ -194,6 +233,7 @@ void app_main(void)
      */
     ESP_ERROR_CHECK(example_connect());
 
+    snprintf(identificador_boot, sizeof(identificador_boot), "%04" PRIx32, (uint32_t)(esp_random() & 0xffffU));
     ESP_ERROR_CHECK(sensores_iniciar());
     ESP_ERROR_CHECK(entrada_gpio_iniciar(tratar_evento_botao));
     iniciar_mqtt();
