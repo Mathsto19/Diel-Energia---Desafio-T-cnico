@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 570" role="img" aria-labelledby="title desc">
+  <title id="title">Como a telemetria continua quando o Modbus cai</title>
+  <desc id="desc">Servidor Python envia registradores à tarefa Modbus. Uma fila guarda a última amostra. Telemetria lê sem esperar a rede e envia MQTT TLS. GPIO usa tarefa separada.</desc>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#475569"/></marker></defs>
+  <rect width="1120" height="570" rx="20" fill="#f8fafc"/>
+  <g font-family="Segoe UI, sans-serif" fill="#0f172a">
+    <text x="35" y="52" font-size="28" font-weight="700">Da leitura à mensagem MQTT</text>
+    <text x="35" y="82" font-size="16" fill="#475569">Diagrama da implementação — ilustração, não evidência de execução.</text>
+    <g stroke="#cbd5e1" stroke-width="2">
+      <rect x="35" y="130" width="245" height="120" rx="12" fill="#e0f2fe"/>
+      <rect x="335" y="130" width="260" height="120" rx="12" fill="#dbeafe"/>
+      <rect x="650" y="130" width="420" height="120" rx="12" fill="#dcfce7"/>
+      <rect x="650" y="315" width="240" height="115" rx="12" fill="#dbeafe"/>
+      <rect x="335" y="315" width="260" height="115" rx="12" fill="#ede9fe"/>
+      <rect x="35" y="315" width="245" height="115" rx="12" fill="#e0f2fe"/>
+    </g>
+    <text x="53" y="162" font-size="21" font-weight="700">Servidor Python</text>
+    <text x="53" y="191" font-size="16">TCP 5020 • função 03</text>
+    <text x="53" y="217" font-size="16">HR 0 = 250 / HR 1 = 600</text>
+    <text x="355" y="162" font-size="21" font-weight="700">Tarefa Modbus</text>
+    <text x="355" y="191" font-size="16">DNS, conexão e consultas</text>
+    <text x="355" y="217" font-size="16">Novas tentativas após falhas</text>
+    <text x="670" y="162" font-size="21" font-weight="700">Última amostra • fila de 1 posição</text>
+    <text x="670" y="191" font-size="16">Atualizada em sucesso ou falha</text>
+    <text x="670" y="217" font-size="16">Sem atualização por 3 s → leitura inválida</text>
+    <text x="670" y="349" font-size="21" font-weight="700">Telemetria</text>
+    <text x="670" y="378" font-size="16">Lê a fila sem esperar</text>
+    <text x="670" y="404" font-size="16">Intervalo: 1–60 s</text>
+    <text x="355" y="349" font-size="21" font-weight="700">Outbox MQTT</text>
+    <text x="355" y="378" font-size="16">TLS • QoS 1 • até 16 KiB</text>
+    <text x="355" y="404" font-size="16">Broker → MQTTX</text>
+    <text x="53" y="349" font-size="21" font-weight="700">Botão / tarefa GPIO</text>
+    <text x="53" y="378" font-size="16">Pressionar e soltar</text>
+    <text x="53" y="404" font-size="16">Eventos independentes</text>
+    <g fill="none" stroke="#475569" stroke-width="3" marker-end="url(#arrow)">
+      <path d="M280 190 H328"/><path d="M595 190 H643"/>
+      <path d="M770 250 V308"/><path d="M650 373 H602"/><path d="M280 373 H328"/>
+    </g>
+    <rect x="35" y="472" width="1035" height="62" rx="12" fill="#fef3c7"/>
+    <text x="55" y="498" font-size="17">Servidor caiu? A telemetria continua e publica sensors_valid=false após detectar falha ou expirar a amostra.</text>
+    <text x="55" y="523" font-size="17">Servidor voltou? Uma nova leitura válida repõe os valores; o boot_id permite conferir se houve reinício.</text>
+  </g>
+</svg>

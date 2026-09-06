@@ -1,0 +1,57 @@
+=== sensors.c: modbus_tcp ===
+Nao foi possivel resolver o host Modbus host.wokwi.internal; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Host Modbus host.wokwi.internal resolvido para 127.0.0.1
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Host Modbus host.wokwi.internal resolvido para 127.0.0.1
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Host Modbus host.wokwi.internal resolvido para 127.0.0.1
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Host Modbus host.wokwi.internal resolvido para 127.0.0.1
+Mestre Modbus iniciado; conexao automatica em host.wokwi.internal:5020, unidade 1
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus disponivel/recuperado: 25.0 C, 60.0 %
+PASS: inicializacao ausente, falhas de DNS/criacao/descritor/start e recuperacao
+Modbus disponivel/recuperado: 25.0 C, 60.0 %
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+PASS: leitura nao bloqueia durante requisicao e amostra vencida fica invalida
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus disponivel/recuperado: 31.0 C, 72.5 %
+PASS: 30 falhas e recuperacao com valores novos, sem recriar mestre/tarefa
+Host Modbus host.wokwi.internal resolvido para 127.0.0.1
+Falha ao liberar mestre Modbus: erro injetado
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+Modbus indisponivel (erro injetado); telemetria continua; nova tentativa em 2000 ms
+PASS: falha de limpeza nao reutiliza objeto parcialmente destruido
+=== sensors.c: simulated ===
+Sensores em modo simulado
+PASS: modo simulado mantem ciclo de 20 leituras

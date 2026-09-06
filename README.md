@@ -1,6 +1,6 @@
 # Telemetria ESP32 MQTT
 
-Comece pelo [manual b?sico de uso](docs/manual-basico.md): compila??o, Wokwi, bot?o, MQTTX e altera??o do intervalo.
+Comece pelo [manual básico de uso](docs/manual-basico.md): compilação, Wokwi, botão, MQTTX e alteração do intervalo.
 
 Firmware para ESP32 clássico com ESP-IDF 6.1.0, FreeRTOS, MQTT sobre TLS, leitura de temperatura e umidade, eventos de botão e configuração remota do intervalo.
 
@@ -17,6 +17,10 @@ Firmware para ESP32 clássico com ESP-IDF 6.1.0, FreeRTOS, MQTT sobre TLS, leitu
 ## Hardware e ambiente
 
 O projeto usa ESP32 clássico (`esp32`) e foi compilado com ESP-IDF 6.1.0. A simulação usa Wokwi. O botão deve ser ligado entre o GPIO 27 e GND, em contatos de lados diferentes do componente.
+
+![Esquema do circuito ESP32 com botão no GPIO 27](docs/evidencias/circuito.png)
+
+O esquema acima foi desenhado a partir de [`firmware/diagram.json`](firmware/diagram.json); não é uma captura do Wokwi. O botão usa pull-up interno: solto = nível 1; pressionado = nível 0. Temperatura e umidade chegam por Modbus TCP ou são geradas no modo simulado, sem sensores físicos conectados ao circuito.
 
 A configuração padrão usa a rede `Wokwi-GUEST`, sem senha. Para uma placa física, ajuste SSID e senha pelo `idf.py menuconfig` e troque o host Modbus em `firmware/main/app_config.h` pelo IP do computador.
 
@@ -56,7 +60,13 @@ O mapa usa offsets começando em zero:
 | `0` | Temperatura × 10 | `250` = 25,0 °C |
 | `1` | Umidade × 10 | `600` = 60,0% |
 
-A consulta usa função `03`, unidade `1` e timeout de 1 segundo. Se o servidor estiver desligado, a aplicação continua e publica `sensors_valid: false`.
+A consulta usa função `03`, unidade `1` e timeout de resposta de 1 segundo. A biblioteca também possui esperas internas de conexão e API; esse timeout não representa o tempo total de uma chamada.
+
+A tarefa Modbus resolve o host, configura os descritores e inicia o mestre com `start_disconnected=true`. Falhas de DNS ou inicialização são tentadas novamente após 2 segundos. Depois de iniciado, o driver TCP cuida da reconexão do mesmo mestre; não se destrói uma consulta em andamento.
+
+As leituras bem-sucedidas são repetidas após 1 segundo; em falha, após 2 segundos. A telemetria consulta uma fila de uma posição sem esperar a rede. Ao detectar falha ou quando a amostra completar 3 segundos sem atualização, publica `sensors_valid: false` e valores numéricos zerados. Esses zeros são placeholders, não medições. Uma leitura bem-sucedida restaura os valores e `sensors_valid: true`.
+
+Para testar a recuperação, mantenha o Wokwi executando, pare apenas o servidor Python com `Ctrl+C`, aguarde pelo menos três publicações e execute o servidor novamente. Confira a sequência `true → false → true`, o mesmo `boot_id` e `uptime_ms` crescente. O procedimento e a situação da validação estão em [`docs/testes.md`](docs/testes.md).
 
 ## MQTT
 
@@ -97,18 +107,22 @@ O firmware confirma em `.../config/ack` somente depois de aplicar o valor. JSON 
 
 ## Tarefas e filas
 
-A tarefa de eventos GPIO usa prioridade 5 e a tarefa de telemetria usa prioridade 3. O callback do botão apenas coloca um registro curto na fila. A fila de configuração tem quatro entradas. O outbox MQTT tem limite de 16 KiB; quando uma mensagem é rejeitada, a perda é contabilizada e o firmware continua funcionando. Reinicializações perdem pendências mantidas em RAM.
+A tarefa de eventos GPIO usa prioridade 5, a tarefa de telemetria usa prioridade 3 e a tarefa de aquisição Modbus usa prioridade 2. O callback do botão monta o evento JSON e o enfileira no outbox MQTT. A telemetria e os ACKs de configuração não aguardam DNS ou consultas Modbus. A fila de configuração tem quatro entradas. O outbox MQTT tem limite de 16 KiB; quando uma mensagem é rejeitada, a perda é contabilizada e o firmware continua funcionando. Reinicializações perdem pendências mantidas em RAM.
+
+![Fluxo de aquisição, fila de amostras e publicação MQTT](docs/evidencias/funcionamento.png)
 
 ## Testes e limitações
 
-Os resultados registrados estão em [`docs/testes.md`](docs/testes.md). A compilação foi validada com o modo simulado e também com o caminho Modbus TCP habilitado. Os testes que dependem de uma placa, Wokwi conectado, MQTTX ou uma execução de 30 minutos precisam ser repetidos no ambiente de execução e têm seus limites indicados na tabela.
+Os resultados e os comandos para repetir os testes estão em [`docs/testes.md`](docs/testes.md). Os registros de compilação, testes locais e diagramas estão organizados em [`docs/evidencias/`](docs/evidencias/README.md).
+
+O teste local compila o próprio `sensors.c` com substitutos de FreeRTOS, DNS e ESP-Modbus, exercitando falhas e recuperação. Ele não comprova o comportamento do driver TCP no ESP32, a chegada ao broker nem a recuperação real no Wokwi. Esses resultados ficam separados na tabela de testes; capturas só são registradas quando disponíveis.
 
 ## Referências e componentes reaproveitados
 
 - Exemplo oficial [MQTT do ESP-IDF](https://github.com/espressif/esp-idf/tree/master/examples/protocols/mqtt).
 - `protocol_examples_common`, usado para conexão Wi-Fi.
-- Componente [Button da Espressif](https://components.espressif.com/components/espressif/button).
 - Componente [ESP-Modbus](https://components.espressif.com/components/espressif/esp-modbus), baseado no exemplo `mb_tcp_master`.
+- [API oficial do mestre ESP-Modbus](https://docs.espressif.com/projects/esp-modbus/en/main/esp32/master_api_overview.html); a versão resolvida neste projeto está em `firmware/dependencies.lock` (2.1.3 nesta validação).
 - Exemplo oficial [SNTP](https://github.com/espressif/esp-idf/tree/master/examples/protocols/sntp).
 - Componente [cJSON](https://components.espressif.com/components/espressif/cjson).
 - Servidor de teste baseado na API do [pyModbusTCP](https://pymodbustcp.readthedocs.io/en/stable/examples/server.html).

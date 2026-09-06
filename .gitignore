@@ -6,5 +6,7 @@ sdkconfig
 sdkconfig.old
 
 .venv/
+.venv-test/
+.zig-cache/
 __pycache__/
 *.pyc

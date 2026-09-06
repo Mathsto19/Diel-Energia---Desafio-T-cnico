@@ -276,8 +276,10 @@ static void tarefa_telemetria(void *argumento)
                           adicionar_diagnosticos(telemetria);
             if (valido) {
                 colocar_json_na_fila(TOPICO_TELEMETRIA, telemetria);
-                ESP_LOGI(TAG, "Telemetria: %.1f C | %.1f %% | modo=%s | intervalo=%" PRIu32 " ms",
-                         leitura.temperatura_celsius, leitura.umidade_percentual, sensores_modo(), intervalo_leitura_ms);
+                ESP_LOGI(TAG, "Telemetria: %.1f C | %.1f %% | modo=%s | sensors_valid=%s | boot_id=%s | uptime_ms=%" PRIu32 " | intervalo=%" PRIu32 " ms",
+                         leitura.temperatura_celsius, leitura.umidade_percentual, sensores_modo(),
+                         leitura.leitura_valida ? "true" : "false", identificador_boot,
+                         obter_uptime_ms(), intervalo_leitura_ms);
             } else {
                 ESP_LOGE(TAG, "Nao foi possivel criar a telemetria JSON");
             }
