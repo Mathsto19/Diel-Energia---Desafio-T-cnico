@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
 /* Exemplo de MQTT com TLS.
-   Aviso de licenÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§a original preservado abaixo.
+   Aviso de licenca original preservado abaixo.
 
    This example code is in the Public Domain (or CC0 licensed, at your option.)
 
@@ -54,11 +54,11 @@ extern const uint8_t mosquitto_org_crt_end[] asm("_binary_mosquitto_org_crt_end"
 #endif
 
 /*
- * @brief FunÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£o registrada para tratar eventos MQTT
+ * @brief Funcao registrada para tratar eventos MQTT
  *
- *  O loop de eventos do cliente MQTT chama esta funÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£o.
+ *  O loop de eventos do cliente MQTT chama esta funcao.
  *
- * @param argumentos dados do usuÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡rio associados ao evento.
+ * @param argumentos dados do usuario associados ao evento.
  * @param base base de eventos (MQTT neste exemplo).
  * @param identificador_evento identificador do evento recebido.
  * @param dados_evento dados do evento, do tipo esp_mqtt_event_handle_t.
@@ -161,7 +161,7 @@ static void iniciar_mqtt(void)
 
     ESP_LOGI(TAG, "[APP] Memoria livre: %" PRIu32 " bytes", esp_get_free_heap_size());
     cliente_mqtt = esp_mqtt_client_init(&configuracao_mqtt);
-    /* O ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âºltimo argumento permite passar dados para tratar_evento_mqtt */
+    /* O ultimo argumento permite passar dados para tratar_evento_mqtt */
     esp_mqtt_client_register_event(cliente_mqtt, ESP_EVENT_ANY_ID, tratar_evento_mqtt, NULL);
     esp_mqtt_client_start(cliente_mqtt);
 }
@@ -185,8 +185,8 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
     /* Configura Wi-Fi ou Ethernet conforme selecionado no menuconfig.
-     * Consulte a seÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£o sobre conexao Wi-Fi ou Ethernet em
-     * examples/protocols/README.md para detalhes desta funÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£o.
+     * Consulte a secao sobre conexao Wi-Fi ou Ethernet em
+     * examples/protocols/README.md para detalhes desta funcao.
      */
     ESP_ERROR_CHECK(example_connect());
 
