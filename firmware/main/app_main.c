@@ -120,9 +120,9 @@ static void tratar_evento_mqtt(void *argumentos, esp_event_base_t base, int32_t 
     }
 }
 
-static void tratar_botao_pressionado(void)
+static void tratar_evento_botao(bool pressionado, uint32_t instante_ms)
 {
-    ESP_LOGI(TAG, "Botao pressionado no GPIO %d", GPIO_BOTAO);
+    ESP_LOGI(TAG, "Botao %s no GPIO %d em %" PRIu32 " ms", pressionado ? "pressionado" : "solto", GPIO_BOTAO, instante_ms);
 }
 
 static void tarefa_telemetria(void *argumento)
@@ -195,7 +195,7 @@ void app_main(void)
     ESP_ERROR_CHECK(example_connect());
 
     ESP_ERROR_CHECK(sensores_iniciar());
-    ESP_ERROR_CHECK(entrada_gpio_iniciar(tratar_botao_pressionado));
+    ESP_ERROR_CHECK(entrada_gpio_iniciar(tratar_evento_botao));
     iniciar_mqtt();
-    xTaskCreate(tarefa_telemetria, "tarefa_telemetria", 4096, NULL, 5, NULL);
+    xTaskCreate(tarefa_telemetria, "tarefa_telemetria", 4096, NULL, 3, NULL);
 }
