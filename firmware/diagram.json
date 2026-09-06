@@ -22,6 +22,8 @@
     }
   ],
   "connections": [
+    [ "esp:TX0", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX0", "$serialMonitor:TX", "", [] ],
     [ "button1:1.l", "esp:27", "green", [] ],
     [ "button1:2.l", "esp:GND.1", "black", [] ]
   ],
