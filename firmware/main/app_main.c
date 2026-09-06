@@ -134,11 +134,15 @@ static void tarefa_telemetria(void *argumento)
     while (true) {
         if (sensores_ler(&leitura) == ESP_OK && cliente_mqtt != NULL) {
             int tamanho = snprintf(mensagem, sizeof(mensagem),
-                                   "{\"dispositivo\":\"%s\",\"temperatura\":%.2f,\"umidade\":%.2f}",
+                                   "{\"dispositivo\":\"%s\",\"modo\":\"simulated\",\"temperatura\":%.2f,\"umidade\":%.2f,\"leitura_valida\":%s}",
                                    IDENTIFICACAO_DISPOSITIVO,
                                    leitura.temperatura_celsius,
-                                   leitura.umidade_percentual);
+                                   leitura.umidade_percentual,
+                                   leitura.leitura_valida ? "true" : "false");
             esp_mqtt_client_publish(cliente_mqtt, TOPICO_TELEMETRIA, mensagem, tamanho, 1, 0);
+            ESP_LOGI(TAG, "Temperatura: %.1f C | Umidade: %.1f %% | Valida: %s | Modo: simulated",
+                     leitura.temperatura_celsius, leitura.umidade_percentual,
+                     leitura.leitura_valida ? "sim" : "nao");
             ESP_LOGI(TAG, "Telemetria enviada: %s", mensagem);
         }
         vTaskDelay(pdMS_TO_TICKS(INTERVALO_LEITURA_MS));

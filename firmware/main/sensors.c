@@ -1,6 +1,7 @@
 ﻿#include "sensors.h"
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include "esp_check.h"
 #include "freertos/FreeRTOS.h"
@@ -22,8 +23,9 @@ esp_err_t sensores_ler(leitura_sensores_t *leitura)
 
     xSemaphoreTake(mutex_sensores, portMAX_DELAY);
     contador_leituras++;
-    leitura->temperatura_celsius = 24.0f + (float)(contador_leituras % 10) * 0.3f;
-    leitura->umidade_percentual = 55.0f + (float)(contador_leituras % 8) * 0.7f;
+    leitura->temperatura_celsius = 25.0f + (float)(contador_leituras - 1) * 0.2f;
+    leitura->umidade_percentual = 60.0f + (float)(contador_leituras - 1) * 0.5f;
+    leitura->leitura_valida = true;
     xSemaphoreGive(mutex_sensores);
     return ESP_OK;
 }
