@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include "app_config.h"
 #include "gpio_input.h"
 #include "sensors.h"
@@ -18,6 +19,7 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
+#include "esp_netif_sntp.h"
 #include "esp_random.h"
 #include "esp_system.h"
 #include "esp_timer.h"
@@ -290,6 +292,30 @@ static void tarefa_telemetria(void *argumento)
         }
     }
 }
+static void sincronizar_relogio(void)
+{
+    esp_sntp_config_t configuracao = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
+    configuracao.start = false;
+    esp_err_t erro = esp_netif_sntp_init(&configuracao);
+    if (erro != ESP_OK && erro != ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG, "Nao foi possivel inicializar o SNTP: %s", esp_err_to_name(erro));
+        return;
+    }
+    erro = esp_netif_sntp_start();
+    if (erro != ESP_OK && erro != ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG, "Nao foi possivel iniciar o SNTP: %s", esp_err_to_name(erro));
+        return;
+    }
+    ESP_LOGI(TAG, "Aguardando sincronizacao do relogio pelo SNTP");
+    erro = esp_netif_sntp_sync_wait(pdMS_TO_TICKS(15000));
+    if (erro == ESP_OK) {
+        time_t agora;
+        time(&agora);
+        ESP_LOGI(TAG, "Relogio sincronizado: %" PRIdMAX, (intmax_t)agora);
+    } else {
+        ESP_LOGW(TAG, "SNTP nao sincronizou no prazo; MQTT continuara tentando TLS");
+    }
+}
 static void iniciar_mqtt(void)
 {
     const esp_mqtt_client_config_t configuracao_mqtt = {
@@ -321,8 +347,9 @@ void app_main(void)
     ESP_ERROR_CHECK(entrada_gpio_iniciar(tratar_evento_botao));
     fila_configuracao = xQueueCreate(4, sizeof(comando_configuracao_t));
     ESP_ERROR_CHECK(fila_configuracao != NULL ? ESP_OK : ESP_ERR_NO_MEM);
-    iniciar_mqtt();
     ESP_ERROR_CHECK(example_connect());
+    sincronizar_relogio();
+    iniciar_mqtt();
     ESP_ERROR_CHECK(sensores_iniciar());
     xTaskCreate(tarefa_telemetria, "tarefa_telemetria", 4096, NULL, 3, NULL);
 }
