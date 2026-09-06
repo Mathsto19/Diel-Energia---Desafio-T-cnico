@@ -90,3 +90,8 @@ bool entrada_gpio_nivel_atual(void)
     xSemaphoreGive(mutex_estado);
     return nivel;
 }
+
+uint32_t entrada_gpio_eventos_perdidos(void)
+{
+    return __atomic_load_n(&eventos_perdidos, __ATOMIC_RELAXED);
+}

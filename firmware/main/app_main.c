@@ -2,13 +2,11 @@
  * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
-
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-
 #include "app_config.h"
 #include "gpio_input.h"
 #include "sensors.h"
@@ -22,6 +20,7 @@
 #include "esp_random.h"
 #include "esp_system.h"
 #include "esp_timer.h"
+#include "esp_wifi.h"
 #include "mqtt_client.h"
 #include "nvs_flash.h"
 #include "protocol_examples_common.h"
@@ -34,6 +33,9 @@ static uint32_t sequencia_mqtt;
 static uint32_t falhas_enfileiramento;
 static uint32_t outbox_cheio;
 static uint32_t mensagens_expiradas;
+static uint32_t reconexoes_mqtt;
+static uint32_t falhas_mqtt;
+static bool mqtt_ja_conectou;
 
 #if CONFIG_EXAMPLE_BROKER_CERTIFICATE_OVERRIDDEN
 static const char certificado_alternativo_pem[] =
@@ -59,7 +61,6 @@ static esp_err_t colocar_json_na_fila(const char *topico, cJSON *objeto)
         falhas_enfileiramento++;
         return ESP_ERR_NO_MEM;
     }
-
     int id = esp_mqtt_client_enqueue(cliente_mqtt, topico, texto, 0, 1, 0, true);
     cJSON_free(texto);
     if (id == -2) {
@@ -84,38 +85,62 @@ static bool adicionar_campo_comum(cJSON *objeto, const char *tipo)
            cJSON_AddNumberToObject(objeto, "uptime_ms", obter_uptime_ms()) != NULL;
 }
 
+static bool adicionar_diagnosticos(cJSON *telemetria)
+{
+    cJSON *diagnosticos = cJSON_AddObjectToObject(telemetria, "diagnostics");
+    wifi_ap_record_t informacoes_wifi;
+    bool wifi_disponivel = esp_wifi_sta_get_ap_info(&informacoes_wifi) == ESP_OK;
+    bool valido = diagnosticos != NULL &&
+                  cJSON_AddNumberToObject(diagnosticos, "uptime_ms", obter_uptime_ms()) != NULL &&
+                  cJSON_AddNumberToObject(diagnosticos, "free_heap_bytes", esp_get_free_heap_size()) != NULL &&
+                  cJSON_AddNumberToObject(diagnosticos, "min_free_heap_bytes", esp_get_minimum_free_heap_size()) != NULL &&
+                  cJSON_AddNumberToObject(diagnosticos, "outbox_bytes", cliente_mqtt != NULL ? esp_mqtt_client_get_outbox_size(cliente_mqtt) : 0) != NULL &&
+                  cJSON_AddNumberToObject(diagnosticos, "mqtt_reconnections", reconexoes_mqtt) != NULL &&
+                  cJSON_AddNumberToObject(diagnosticos, "mqtt_failures", falhas_mqtt) != NULL &&
+                  cJSON_AddNumberToObject(diagnosticos, "enqueue_failures", falhas_enfileiramento) != NULL &&
+                  cJSON_AddNumberToObject(diagnosticos, "outbox_full", outbox_cheio) != NULL &&
+                  cJSON_AddNumberToObject(diagnosticos, "expired_messages", mensagens_expiradas) != NULL &&
+                  cJSON_AddNumberToObject(diagnosticos, "gpio_events_dropped", entrada_gpio_eventos_perdidos()) != NULL &&
+                  cJSON_AddNumberToObject(diagnosticos, "interval_ms", INTERVALO_LEITURA_MS) != NULL &&
+                  cJSON_AddNumberToObject(diagnosticos, "telemetry_stack_free_words", uxTaskGetStackHighWaterMark(NULL)) != NULL;
+    if (!valido) {
+        return false;
+    }
+    if (wifi_disponivel) {
+        return cJSON_AddNumberToObject(diagnosticos, "wifi_rssi_dbm", informacoes_wifi.rssi) != NULL;
+    }
+    return cJSON_AddStringToObject(diagnosticos, "wifi_rssi_dbm", "unavailable") != NULL;
+}
+
 static void tratar_evento_mqtt(void *argumentos, esp_event_base_t base, int32_t identificador_evento, void *dados_evento)
 {
     (void) argumentos;
     (void) base;
     esp_mqtt_event_handle_t evento = dados_evento;
     esp_mqtt_client_handle_t cliente = evento->client;
-    int identificador_mensagem;
-
     switch ((esp_mqtt_event_id_t)identificador_evento) {
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-        identificador_mensagem = esp_mqtt_client_subscribe(cliente, TOPICO_CONFIGURACAO_SET, 1);
-        ESP_LOGI(TAG, "Assinatura de configuracao enviada, id=%d", identificador_mensagem);
+        if (mqtt_ja_conectou) {
+            reconexoes_mqtt++;
+        }
+        mqtt_ja_conectou = true;
+        esp_mqtt_client_subscribe(cliente, TOPICO_CONFIGURACAO_SET, 1);
         break;
     case MQTT_EVENT_DISCONNECTED:
+        falhas_mqtt++;
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
-        break;
-    case MQTT_EVENT_SUBSCRIBED:
-        ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, id=%d", evento->msg_id);
-        break;
-    case MQTT_EVENT_PUBLISHED:
-        ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, id=%d", evento->msg_id);
-        break;
-    case MQTT_EVENT_DATA:
-        ESP_LOGI(TAG, "MQTT_EVENT_DATA: topico=%.*s dados=%.*s", evento->topic_len, evento->topic, evento->data_len, evento->data);
         break;
     case MQTT_EVENT_DELETED:
         mensagens_expiradas++;
         ESP_LOGW(TAG, "Mensagem removida por expiracao, id=%d", evento->msg_id);
         break;
     case MQTT_EVENT_ERROR:
+        falhas_mqtt++;
         ESP_LOGW(TAG, "MQTT_EVENT_ERROR");
+        break;
+    case MQTT_EVENT_DATA:
+        ESP_LOGI(TAG, "MQTT_EVENT_DATA: topico=%.*s dados=%.*s", evento->topic_len, evento->topic, evento->data_len, evento->data);
         break;
     default:
         break;
@@ -128,13 +153,10 @@ static void tratar_evento_botao(bool pressionado, uint32_t instante_ms)
     bool valido = evento != NULL && adicionar_campo_comum(evento, "gpio_event") &&
                   cJSON_AddNumberToObject(evento, "pin", GPIO_BOTAO) != NULL &&
                   cJSON_AddNumberToObject(evento, "level", pressionado ? 0 : 1) != NULL;
-    if (!valido) {
-        cJSON_Delete(evento);
+    if (valido) {
+        colocar_json_na_fila(TOPICO_EVENTO, evento);
+    } else {
         ESP_LOGE(TAG, "Nao foi possivel criar o evento do GPIO");
-        return;
-    }
-    if (colocar_json_na_fila(TOPICO_EVENTO, evento) != ESP_OK) {
-        ESP_LOGW(TAG, "Evento GPIO descartado");
     }
     cJSON_Delete(evento);
     ESP_LOGI(TAG, "Evento GPIO: %s no pino %d em %" PRIu32 " ms", pressionado ? "pressionado" : "solto", GPIO_BOTAO, instante_ms);
@@ -144,7 +166,6 @@ static void tarefa_telemetria(void *argumento)
 {
     leitura_sensores_t leitura;
     (void) argumento;
-
     while (true) {
         if (sensores_ler(&leitura) == ESP_OK && cliente_mqtt != NULL) {
             cJSON *telemetria = cJSON_CreateObject();
@@ -153,7 +174,8 @@ static void tarefa_telemetria(void *argumento)
                           cJSON_AddNumberToObject(telemetria, "temperature_c", leitura.temperatura_celsius) != NULL &&
                           cJSON_AddNumberToObject(telemetria, "humidity_pct", leitura.umidade_percentual) != NULL &&
                           cJSON_AddBoolToObject(telemetria, "sensors_valid", leitura.leitura_valida) != NULL &&
-                          cJSON_AddNumberToObject(telemetria, "gpio_level", entrada_gpio_nivel_atual() ? 0 : 1) != NULL;
+                          cJSON_AddNumberToObject(telemetria, "gpio_level", entrada_gpio_nivel_atual() ? 0 : 1) != NULL &&
+                          adicionar_diagnosticos(telemetria);
             if (valido) {
                 colocar_json_na_fila(TOPICO_TELEMETRIA, telemetria);
                 ESP_LOGI(TAG, "Telemetria: %.1f C | %.1f %% | modo=simulated", leitura.temperatura_celsius, leitura.umidade_percentual);
@@ -161,8 +183,6 @@ static void tarefa_telemetria(void *argumento)
                 ESP_LOGE(TAG, "Nao foi possivel criar a telemetria JSON");
             }
             cJSON_Delete(telemetria);
-            ESP_LOGD(TAG, "Pendencias: falhas=%" PRIu32 ", outbox_cheio=%" PRIu32 ", expiradas=%" PRIu32 ", eventos_gpio_perdidos=%" PRIu32,
-                     falhas_enfileiramento, outbox_cheio, mensagens_expiradas, entrada_gpio_eventos_perdidos());
         }
         vTaskDelay(pdMS_TO_TICKS(INTERVALO_LEITURA_MS));
     }
@@ -171,12 +191,8 @@ static void tarefa_telemetria(void *argumento)
 static void iniciar_mqtt(void)
 {
     const esp_mqtt_client_config_t configuracao_mqtt = {
-        .network = {
-            .disable_auto_reconnect = false,
-        },
-        .outbox = {
-            .limit = 16 * 1024,
-        },
+        .network = { .disable_auto_reconnect = false },
+        .outbox = { .limit = 16 * 1024 },
         .broker = {
             .address.uri = CONFIG_EXAMPLE_MQTT_BROKER_URI,
 #if CONFIG_EXAMPLE_BROKER_CERTIFICATE_OVERRIDDEN
@@ -188,7 +204,6 @@ static void iniciar_mqtt(void)
 #endif
         },
     };
-
     cliente_mqtt = esp_mqtt_client_init(&configuracao_mqtt);
     ESP_ERROR_CHECK(cliente_mqtt != NULL ? ESP_OK : ESP_ERR_NO_MEM);
     ESP_ERROR_CHECK(esp_mqtt_client_register_event(cliente_mqtt, ESP_EVENT_ANY_ID, tratar_evento_mqtt, NULL));
