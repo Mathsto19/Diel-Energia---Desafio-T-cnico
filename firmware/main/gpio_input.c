@@ -22,6 +22,7 @@ static SemaphoreHandle_t mutex_estado;
 static button_handle_t dispositivo_botao;
 static evento_botao_t callback_evento;
 static bool nivel_atual;
+static volatile uint32_t eventos_perdidos;
 
 static void callback_botao(void *dispositivo, void *dados)
 {
@@ -30,7 +31,9 @@ static void callback_botao(void *dispositivo, void *dados)
         .instante_ms = (uint32_t)(esp_timer_get_time() / 1000ULL),
     };
     (void) dados;
-    xQueueSend(fila_eventos, &evento, 0);
+    if (xQueueSend(fila_eventos, &evento, 0) != pdTRUE) {
+        __atomic_fetch_add(&eventos_perdidos, 1, __ATOMIC_RELAXED);
+    }
 }
 
 static void tarefa_eventos_gpio(void *argumento)

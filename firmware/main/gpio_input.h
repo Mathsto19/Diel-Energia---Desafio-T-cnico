@@ -1,4 +1,4 @@
-﻿#ifndef GPIO_INPUT_H
+#ifndef GPIO_INPUT_H
 #define GPIO_INPUT_H
 
 #include <stdbool.h>
@@ -10,5 +10,6 @@ typedef void (*evento_botao_t)(bool pressionado, uint32_t instante_ms);
 
 esp_err_t entrada_gpio_iniciar(evento_botao_t callback);
 bool entrada_gpio_nivel_atual(void);
+uint32_t entrada_gpio_eventos_perdidos(void);
 
 #endif
