@@ -12,6 +12,7 @@
 #include "sensors.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 #include "cJSON.h"
 #include "esp_crt_bundle.h"
 #include "esp_event.h"
@@ -36,6 +37,20 @@ static uint32_t mensagens_expiradas;
 static uint32_t reconexoes_mqtt;
 static uint32_t falhas_mqtt;
 static bool mqtt_ja_conectou;
+
+#define TAMANHO_COMANDO_CONFIG 512
+#define TAMANHO_SOLICITACAO 64
+
+typedef struct {
+    char request_id[TAMANHO_SOLICITACAO];
+    uint32_t intervalo_ms;
+} comando_configuracao_t;
+
+static QueueHandle_t fila_configuracao;
+static uint32_t intervalo_leitura_ms = INTERVALO_LEITURA_MS;
+static char buffer_configuracao[TAMANHO_COMANDO_CONFIG];
+static size_t configuracao_recebida;
+static size_t configuracao_total;
 
 #if CONFIG_EXAMPLE_BROKER_CERTIFICATE_OVERRIDDEN
 static const char certificado_alternativo_pem[] =
@@ -101,7 +116,7 @@ static bool adicionar_diagnosticos(cJSON *telemetria)
                   cJSON_AddNumberToObject(diagnosticos, "outbox_full", outbox_cheio) != NULL &&
                   cJSON_AddNumberToObject(diagnosticos, "expired_messages", mensagens_expiradas) != NULL &&
                   cJSON_AddNumberToObject(diagnosticos, "gpio_events_dropped", entrada_gpio_eventos_perdidos()) != NULL &&
-                  cJSON_AddNumberToObject(diagnosticos, "interval_ms", INTERVALO_LEITURA_MS) != NULL &&
+                  cJSON_AddNumberToObject(diagnosticos, "interval_ms", intervalo_leitura_ms) != NULL &&
                   cJSON_AddNumberToObject(diagnosticos, "telemetry_stack_free_words", uxTaskGetStackHighWaterMark(NULL)) != NULL;
     if (!valido) {
         return false;
@@ -112,6 +127,85 @@ static bool adicionar_diagnosticos(cJSON *telemetria)
     return cJSON_AddStringToObject(diagnosticos, "wifi_rssi_dbm", "unavailable") != NULL;
 }
 
+static bool topico_configuracao(const esp_mqtt_event_handle_t evento)
+{
+    size_t tamanho_topico = strlen(TOPICO_CONFIGURACAO_SET);
+    return evento->topic != NULL && evento->topic_len == (int)tamanho_topico &&
+           memcmp(evento->topic, TOPICO_CONFIGURACAO_SET, tamanho_topico) == 0;
+}
+
+static void interpretar_comando_configuracao(void)
+{
+    cJSON *objeto = cJSON_ParseWithLength(buffer_configuracao, configuracao_total);
+    if (objeto == NULL) {
+        ESP_LOGW(TAG, "Comando de configuracao nao e um JSON valido");
+        return;
+    }
+    cJSON *id = cJSON_GetObjectItemCaseSensitive(objeto, "request_id");
+    cJSON *intervalo = cJSON_GetObjectItemCaseSensitive(objeto, "telemetry_interval_ms");
+    bool intervalo_inteiro = intervalo != NULL && cJSON_IsNumber(intervalo) &&
+                             intervalo->valuedouble >= 1000.0 && intervalo->valuedouble <= 60000.0 &&
+                             intervalo->valuedouble == (double)intervalo->valueint;
+    if (!cJSON_IsString(id) || id->valuestring == NULL || !intervalo_inteiro) {
+        ESP_LOGW(TAG, "Configuracao rejeitada: request_id ou intervalo invalido");
+        cJSON_Delete(objeto);
+        return;
+    }
+    comando_configuracao_t comando = { 0 };
+    strncpy(comando.request_id, id->valuestring, sizeof(comando.request_id) - 1);
+    comando.intervalo_ms = (uint32_t)intervalo->valueint;
+    if (xQueueSend(fila_configuracao, &comando, 0) != pdTRUE) {
+        ESP_LOGW(TAG, "Fila de configuracao cheia; comando rejeitado");
+    }
+    cJSON_Delete(objeto);
+}
+
+static void receber_fragmento_configuracao(const esp_mqtt_event_handle_t evento)
+{
+    if (evento->total_data_len <= 0 || evento->total_data_len > TAMANHO_COMANDO_CONFIG ||
+        evento->current_data_offset < 0 || evento->data_len < 0 ||
+        evento->current_data_offset + evento->data_len > evento->total_data_len ||
+        evento->current_data_offset + evento->data_len > TAMANHO_COMANDO_CONFIG - 1) {
+        ESP_LOGW(TAG, "Comando de configuracao excede o limite");
+        configuracao_recebida = 0;
+        configuracao_total = 0;
+        return;
+    }
+    if (evento->current_data_offset == 0) {
+        configuracao_recebida = 0;
+        configuracao_total = (size_t)evento->total_data_len;
+    }
+    if (configuracao_total != (size_t)evento->total_data_len ||
+        (size_t)evento->current_data_offset != configuracao_recebida) {
+        ESP_LOGW(TAG, "Fragmento de configuracao fora de ordem");
+        configuracao_recebida = 0;
+        configuracao_total = 0;
+        return;
+    }
+    memcpy(buffer_configuracao + configuracao_recebida, evento->data, (size_t)evento->data_len);
+    configuracao_recebida += (size_t)evento->data_len;
+    if (configuracao_recebida == configuracao_total) {
+        buffer_configuracao[configuracao_total] = '\0';
+        interpretar_comando_configuracao();
+        configuracao_recebida = 0;
+        configuracao_total = 0;
+    }
+}
+
+static void enviar_confirmacao_configuracao(const comando_configuracao_t *comando)
+{
+    cJSON *ack = cJSON_CreateObject();
+    bool valido = ack != NULL && adicionar_campo_comum(ack, "config_ack") &&
+                  cJSON_AddStringToObject(ack, "request_id", comando->request_id) != NULL &&
+                  cJSON_AddNumberToObject(ack, "telemetry_interval_ms", comando->intervalo_ms) != NULL &&
+                  cJSON_AddBoolToObject(ack, "applied", true) != NULL;
+    if (valido) {
+        colocar_json_na_fila(TOPICO_CONFIGURACAO_ACK, ack);
+    } else {
+        ESP_LOGE(TAG, "Nao foi possivel criar a confirmacao de configuracao");
+    }
+    cJSON_Delete(ack);
+}
 static void tratar_evento_mqtt(void *argumentos, esp_event_base_t base, int32_t identificador_evento, void *dados_evento)
 {
     (void) argumentos;
@@ -140,7 +234,9 @@ static void tratar_evento_mqtt(void *argumentos, esp_event_base_t base, int32_t 
         ESP_LOGW(TAG, "MQTT_EVENT_ERROR");
         break;
     case MQTT_EVENT_DATA:
-        ESP_LOGI(TAG, "MQTT_EVENT_DATA: topico=%.*s dados=%.*s", evento->topic_len, evento->topic, evento->data_len, evento->data);
+        if (topico_configuracao(evento)) {
+            receber_fragmento_configuracao(evento);
+        }
         break;
     default:
         break;
@@ -178,16 +274,22 @@ static void tarefa_telemetria(void *argumento)
                           adicionar_diagnosticos(telemetria);
             if (valido) {
                 colocar_json_na_fila(TOPICO_TELEMETRIA, telemetria);
-                ESP_LOGI(TAG, "Telemetria: %.1f C | %.1f %% | modo=%s", leitura.temperatura_celsius, leitura.umidade_percentual, sensores_modo());
+                ESP_LOGI(TAG, "Telemetria: %.1f C | %.1f %% | modo=%s | intervalo=%" PRIu32 " ms",
+                         leitura.temperatura_celsius, leitura.umidade_percentual, sensores_modo(), intervalo_leitura_ms);
             } else {
                 ESP_LOGE(TAG, "Nao foi possivel criar a telemetria JSON");
             }
             cJSON_Delete(telemetria);
         }
-        vTaskDelay(pdMS_TO_TICKS(INTERVALO_LEITURA_MS));
+
+        comando_configuracao_t comando;
+        if (xQueueReceive(fila_configuracao, &comando, pdMS_TO_TICKS(intervalo_leitura_ms)) == pdTRUE) {
+            intervalo_leitura_ms = comando.intervalo_ms;
+            enviar_confirmacao_configuracao(&comando);
+            ESP_LOGI(TAG, "Intervalo atualizado para %" PRIu32 " ms", intervalo_leitura_ms);
+        }
     }
 }
-
 static void iniciar_mqtt(void)
 {
     const esp_mqtt_client_config_t configuracao_mqtt = {
@@ -217,6 +319,8 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     ESP_ERROR_CHECK(entrada_gpio_iniciar(tratar_evento_botao));
+    fila_configuracao = xQueueCreate(4, sizeof(comando_configuracao_t));
+    ESP_ERROR_CHECK(fila_configuracao != NULL ? ESP_OK : ESP_ERR_NO_MEM);
     iniciar_mqtt();
     ESP_ERROR_CHECK(example_connect());
     ESP_ERROR_CHECK(sensores_iniciar());
