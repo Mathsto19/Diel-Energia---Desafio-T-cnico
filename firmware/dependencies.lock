@@ -1,4 +1,38 @@
 dependencies:
+  espressif/button:
+    component_hash: a1f34e8ed2e61ffef1a230fd9477005c2db335c7e1f6a239f43e5f119dcbe1b0
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: '*'
+    - name: idf
+      require: private
+      version: '>=4.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 4.2.1
+  espressif/cjson:
+    component_hash: e788323270d90738662d66fffa910bfe1fba019bba087f01557e70c40485b469
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.7.19~2
+  espressif/cmake_utilities:
+    component_hash: 05165f30922b422b4b90c08845e6d449329b97370fbd06309803d8cb539d79e3
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.1'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.1.1
   espressif/ethernet_init:
     component_hash: 6268f857d06a1c414d38d38d74632e0d94074f8f653106bfa4a1d475a74f8fe0
     dependencies:
@@ -163,9 +197,11 @@ dependencies:
       type: local
     version: '*'
 direct_dependencies:
+- espressif/button
+- espressif/cjson
 - espressif/mqtt
 - idf
 - protocol_examples_common
-manifest_hash: b686eb46af1321e13aa4c0303adeeb3c9563e6befcad53fca74e78f88f240f88
+manifest_hash: 4a81a73c57620c6ce44fc84a4daef67c1e7a12999860710101295eaf9c586f4a
 target: esp32
 version: 3.0.0
