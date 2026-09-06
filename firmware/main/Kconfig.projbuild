@@ -1,5 +1,12 @@
 menu "Configuracao do exemplo"
 
+    config EXAMPLE_SENSORS_MODBUS_TCP
+        bool "Usar sensores Modbus TCP"
+        default n
+        help
+            Consulta temperatura e umidade em registradores Modbus TCP.
+            Desative para usar a leitura simulada do firmware.
+
     choice EXAMPLE_CERT_VALIDATION
         prompt "Metodo de validacao do certificado"
         default EXAMPLE_CERT_VALIDATE_BUNDLE

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -170,7 +170,7 @@ static void tarefa_telemetria(void *argumento)
         if (sensores_ler(&leitura) == ESP_OK && cliente_mqtt != NULL) {
             cJSON *telemetria = cJSON_CreateObject();
             bool valido = telemetria != NULL && adicionar_campo_comum(telemetria, "telemetry") &&
-                          cJSON_AddStringToObject(telemetria, "sensor_mode", "simulated") != NULL &&
+                          cJSON_AddStringToObject(telemetria, "sensor_mode", sensores_modo()) != NULL &&
                           cJSON_AddNumberToObject(telemetria, "temperature_c", leitura.temperatura_celsius) != NULL &&
                           cJSON_AddNumberToObject(telemetria, "humidity_pct", leitura.umidade_percentual) != NULL &&
                           cJSON_AddBoolToObject(telemetria, "sensors_valid", leitura.leitura_valida) != NULL &&
@@ -178,7 +178,7 @@ static void tarefa_telemetria(void *argumento)
                           adicionar_diagnosticos(telemetria);
             if (valido) {
                 colocar_json_na_fila(TOPICO_TELEMETRIA, telemetria);
-                ESP_LOGI(TAG, "Telemetria: %.1f C | %.1f %% | modo=simulated", leitura.temperatura_celsius, leitura.umidade_percentual);
+                ESP_LOGI(TAG, "Telemetria: %.1f C | %.1f %% | modo=%s", leitura.temperatura_celsius, leitura.umidade_percentual, sensores_modo());
             } else {
                 ESP_LOGE(TAG, "Nao foi possivel criar a telemetria JSON");
             }
@@ -216,9 +216,9 @@ void app_main(void)
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-    ESP_ERROR_CHECK(sensores_iniciar());
     ESP_ERROR_CHECK(entrada_gpio_iniciar(tratar_evento_botao));
     iniciar_mqtt();
-    xTaskCreate(tarefa_telemetria, "tarefa_telemetria", 4096, NULL, 3, NULL);
     ESP_ERROR_CHECK(example_connect());
+    ESP_ERROR_CHECK(sensores_iniciar());
+    xTaskCreate(tarefa_telemetria, "tarefa_telemetria", 4096, NULL, 3, NULL);
 }

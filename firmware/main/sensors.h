@@ -1,4 +1,4 @@
-﻿#ifndef SENSORS_H
+#ifndef SENSORS_H
 #define SENSORS_H
 
 #include <stdbool.h>
@@ -13,5 +13,6 @@ typedef struct {
 
 esp_err_t sensores_iniciar(void);
 esp_err_t sensores_ler(leitura_sensores_t *leitura);
+const char *sensores_modo(void);
 
 #endif
